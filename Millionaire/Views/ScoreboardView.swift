@@ -9,6 +9,9 @@ import SwiftUI
 
 struct ScoreboardView: View {
     @ObservedObject var viewModel: ScoreboardViewModel
+    var closeOnTimer: Bool = true
+    @State private var shouldDismiss = false
+    @Environment(\.dismiss) var dismiss
     
     var body: some View {
         ZStack {
@@ -58,6 +61,18 @@ struct ScoreboardView: View {
                 Spacer()
             }
         }
+        .onAppear {
+            if closeOnTimer {
+                Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
+                    shouldDismiss = true
+                }
+            }
+        }
+        .onChange(of: shouldDismiss) { newValue in
+            if newValue {
+                dismiss()
+            }
+        }
     }
 }
 
@@ -72,6 +87,6 @@ struct ScoreboardView: View {
         )
     }
     let session = GameSession(questions: questions, currentQuestionIndex: 0, score: 0)!
-    ScoreboardView(viewModel: ScoreboardViewModel(gameSession: session))
+    ScoreboardView(viewModel: ScoreboardViewModel(gameSession: session), closeOnTimer: true)
 }
 

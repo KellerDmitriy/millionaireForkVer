@@ -10,6 +10,7 @@ import SwiftUI
 struct GameScreen: View {
     @ObservedObject var viewModel: GameViewModel
     @State private var showResultSheet = false
+    @State private var isNeedCloseOnScoreBoard = false
     
     //    MARK: Init
     init(viewModel: GameViewModel) {
@@ -38,10 +39,12 @@ struct GameScreen: View {
         }
         .sheet(isPresented: $showResultSheet) {
             ScoreboardView(
-                    viewModel: ScoreboardViewModel(gameSession: viewModel.session)
-                )
+                viewModel: ScoreboardViewModel(gameSession: viewModel.session),
+                closeOnTimer: isNeedCloseOnScoreBoard
+            )
         }
         .onReceive(viewModel.showResultSheetPublisher) { _ in
+            isNeedCloseOnScoreBoard = true
             showResultSheet = true
         }
         .onAppear {
@@ -55,6 +58,7 @@ struct GameScreen: View {
             
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: {
+                    isNeedCloseOnScoreBoard = false
                     showResultSheet.toggle()
                 }) {
                     Image(ImageResource.iconLevels)
