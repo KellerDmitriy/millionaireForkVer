@@ -31,7 +31,7 @@ final class GameViewModel: ObservableObject {
     /// Обработчик изменения состояния игры
     private let onSessionUpdated: (GameSession) -> Void
     
-    @Published private var session: GameSession {
+    @Published var session: GameSession {
         didSet {
             // Сообщаем обработчику об изменении состояния игры
             onSessionUpdated(session)
@@ -65,6 +65,8 @@ final class GameViewModel: ObservableObject {
     
     // Храним текущую задачу для возможности отмены
     private var answerProcessingTask: Task<Void, Never>?
+    
+    let showResultSheetPublisher = PassthroughSubject<Void, Never>()
     
     // Важно: отменять задачу при деинициализации
     deinit {
@@ -201,6 +203,8 @@ final class GameViewModel: ObservableObject {
         case .incorrect:
             audioService.playWrongAnswerSfx()
         }
+
+        showResultSheetPublisher.send()
 
         // Ждём анимации результата
         do {

@@ -9,6 +9,7 @@ import SwiftUI
 
 struct GameScreen: View {
     @ObservedObject var viewModel: GameViewModel
+    @State private var showResultSheet = false
     
     //    MARK: Init
     init(viewModel: GameViewModel) {
@@ -35,6 +36,14 @@ struct GameScreen: View {
             .allowsHitTesting(viewModel.selectedAnswer == nil)
             .padding(20)
         }
+        .sheet(isPresented: $showResultSheet) {
+            ScoreboardView(
+                    viewModel: ScoreboardViewModel(gameSession: viewModel.session)
+                )
+        }
+        .onReceive(viewModel.showResultSheetPublisher) { _ in
+            showResultSheet = true
+        }
         .onAppear {
             viewModel.startGame()
         }
@@ -45,7 +54,9 @@ struct GameScreen: View {
             }
             
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: {}) {
+                Button(action: {
+                    showResultSheet.toggle()
+                }) {
                     Image(ImageResource.iconLevels)
                 }
             }
