@@ -31,12 +31,17 @@ struct CallToFriendLifelineResult {
 }
 
 /// Модель игры с полной логикой обновления её состояния
-struct GameSession: Hashable {
+struct GameSession: Hashable, Codable {
     /// Массив вопросов
     let questions: [Question]
     
     /// Флаг, указывающий, завершена игра или нет
+    ///  Игра завершена если:
+    // 1. Дали неправильный ответ
+    // 2. Ответили на все 15 вопросов
+    // 3. Время вышло
     private(set) var isFinished: Bool
+    
     /// Индекс текущего вопроса
     private(set) var currentQuestionIndex: Int
     /// Заработанный счет
@@ -49,6 +54,8 @@ struct GameSession: Hashable {
         // Получаем текущий вопрос по индексу
         questions[currentQuestionIndex]
     }
+    /// Флаг для подсказки друга(право на ошибку)
+    private(set) var hasUsedCallToFriend = false
     
     init?(
         questions: [Question],
@@ -75,34 +82,44 @@ struct GameSession: Hashable {
         self.lifelines = lifelines
     }
     
+    
+    mutating func addScore(_ amount: Int) {
+        score += amount
+    }
+
+    mutating func setScore(_ amount: Int) {
+        score = amount
+    }
+    
     /// Функция, возвращающая результат, был ответ верный или нет, и переходящая к следующему вопросу, если таковой есть
     mutating func answer(answer: String) -> AnswerResult? {
         // Проверяем, что игра не закончена
-        guard !isFinished else {
-            return nil
-        }
+        guard !isFinished else { return nil }
         
-        // Убеждаемся, что ответ правильный
         if answer == currentQuestion.correctAnswer {
-            // Увеличиваем счет на цену текущего вопроса. Цену берем из ScoreLogic по индексу текущего вопроса.
-            score += ScoreLogic.questionValues[currentQuestionIndex]
+            // Ничего не начисляем — пусть это делает GameManager
+            // Просто переходим к следующему вопросу
             
-            // Проверяем, есть ли следующий вопрос
-            let hasNextQuestion = currentQuestionIndex + 1 < questions.count
-            
-            // Если да, увеличиваем индекс текущего вопроса, иначе заканчиваем игру
-            if hasNextQuestion {
+            // есть ли следующий вопрос
+            if currentQuestionIndex + 1 < questions.count {
                 currentQuestionIndex += 1
-            } else {
+            } else { // иначе заканчиваем игру
                 isFinished = true
             }
-            
-            // Возвращаем результат о том, что ответ был верный
             return .correct
         } else {
-            // Если ответ неверный, в счет записываем несгораемую сумму.
-            // Заканчиваем игру и возращаем результат о том, что был дан неверный ответ
-            score = ScoreLogic.findClosestCheckpointScore(questionIndex: currentQuestionIndex)
+            // Отметим, что игра завершена. Какую сумму дать - решает GameManager.
+            if hasUsedCallToFriend {
+                print("Использовано право на ошибку. Игра продолжается.")
+                hasUsedCallToFriend = false
+                if currentQuestionIndex + 1 < questions.count {
+                    currentQuestionIndex += 1
+                } else {
+                    isFinished = true
+                }
+                return .correct
+               
+            }
             isFinished = true
             return .incorrect
         }
@@ -113,14 +130,20 @@ struct GameSession: Hashable {
         guard canUse(lifeline: .fiftyFifty) else {
             return nil
         }
-        
+
         lifelines.remove(.fiftyFifty)
-        
-        return FiftyFiftyLifelineResult(
-            disabledAnswers: Set(
-                currentQuestion.incorrectAnswers.shuffled().prefix(2)
-            )
-        )
+
+        // Выбираем один случайный неправильный ответ
+        guard let randomIncorrect = currentQuestion.incorrectAnswers.randomElement() else {
+            return nil
+        }
+
+        // Все ответы, кроме правильного и одного неправильного, отключаем
+        let allAnswers = Set(currentQuestion.incorrectAnswers)
+        let enabledAnswers: Set<String> = [currentQuestion.correctAnswer, randomIncorrect]
+        let disabledAnswers = allAnswers.subtracting(enabledAnswers)
+
+        return FiftyFiftyLifelineResult(disabledAnswers: disabledAnswers)
     }
     
     mutating func useAudienceLifeline() -> AudienceLifelineResult? {
@@ -138,20 +161,29 @@ struct GameSession: Hashable {
         )
     }
     
-    mutating func useCallToFriendLifeline() -> CallToFriendLifelineResult? {
-        guard canUse(lifeline: .callToFriend) else {
-            return nil
+    ///  метод для подсказки "звонок другу"
+    mutating func useLifeline(_ lifeline: Lifeline) {
+        lifelines.remove(lifeline)
+        if lifeline == .callToFriend {
+            print("Подсказка 'Право на ошибку' активирована")
+            hasUsedCallToFriend = true
         }
-        
-        lifelines.remove(.callToFriend)
-        
-        // Звонок другу с вероятностью 80% даст правильный ответ.
-        let isGuessCorrect = Int.random(in: 0..<100) < 80
-        
-        return CallToFriendLifelineResult(
-            answer: isGuessCorrect ? currentQuestion.correctAnswer : currentQuestion.incorrectAnswers.randomElement()!
-        )
     }
+    
+//    mutating func useCallToFriendLifeline() -> CallToFriendLifelineResult? {
+//        guard canUse(lifeline: .callToFriend) else {
+//            return nil
+//        }
+//        
+//        lifelines.remove(.callToFriend)
+//        
+//        // Звонок другу с вероятностью 80% даст правильный ответ.
+//        let isGuessCorrect = Int.random(in: 0..<100) < 80
+//        
+//        return CallToFriendLifelineResult(
+//            answer: isGuessCorrect ? currentQuestion.correctAnswer : currentQuestion.incorrectAnswers.randomElement()!
+//        )
+//    }
     
     private func canUse(lifeline: Lifeline) -> Bool {
         guard !isFinished else {
